@@ -1,0 +1,6 @@
+[submodule "NeuralDialog-LAED"]
+	path = NeuralDialog-LAED
+	url = git@github.com:ishalyminov/NeuralDialog-LAED.git
+[submodule "NeuralDialog-ZSDG"]
+	path = NeuralDialog-ZSDG
+	url = git@github.com:ishalyminov/NeuralDialog-ZSDG.git
