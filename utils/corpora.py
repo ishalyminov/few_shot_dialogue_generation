@@ -90,8 +90,11 @@ class LAEDBlisCorpus(object):
         print("Done loading corpus")
 
     def _read_file(self, path):
-        with open(path) as json_in:
-            data = json.load(json_in)
+        data = []
+        for filename in os.listdir(os.path.join(path, 'dialogues')):
+            with open(os.path.join(path, 'dialogues', filename)) as domain_in:
+                for line in domain_in:
+                    data += json.loads(line)
         return self._process_dialogs(data, exclude_domains=self.config.exclude_domains)
 
     def _process_dialogs(self, data, exclude_domains=[]):
@@ -234,9 +237,11 @@ class ZslBlisCorpus(object):
         return seed_responses
 
     def _read_file(self, path):
-        with open(path, 'rb') as f:
-            data = json.load(f)
-
+        data = []
+        for filename in os.listdir(os.path.join(path, 'dialogues')):
+            with open(os.path.join(path, 'dialogues', filename)) as domain_in:
+                for line in domain_in:
+                    data += json.loads(line)
         return self._process_dialogs(data)
 
     def _process_dialogs(self, data):

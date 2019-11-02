@@ -2,13 +2,17 @@
 
 See the paper "Few-Shot Dialogue Generation Without Annotated Data: A Transfer Learning Approach" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[SigDial 2019 publication]](https://arxiv.org/pdf/1908.05854.pdf) [[Poster]](https://drive.google.com/file/d/1_0jPct70HyChxCTQtxa-EuUv2QBaogDe/view?usp=sharing)
 
+Pre-requisite
+==
+Download the [MetaLWOz](https://www.microsoft.com/en-us/research/project/metalwoz/) dataset (assuming you extract it into `metalwoz-v1` folder)
+
 How To
 =
 
 1. Training a LAED model - StED (skip-thought dialog-level)
 ```
 python st_ed.py \
-    data/crowdsourced_task-oriented_dialogues/blis_collected_dialogues.json \
+    metalwoz-v1 \
     LAEDBlisCorpus \
     vocabs/maluuba.json \
    --exlcude_domains ... \
@@ -18,7 +22,7 @@ python st_ed.py \
   1.1 Training a LAED model - vanilla VAE (dialog-level)
   ```
   python vae.py \
-    data/crowdsourced_task-oriented_dialogues/blis_collected_dialogues.json \
+    metalwoz-v1 \
     LAEDBlisCorpus \
     vocabs/maluuba.json \
    --exlcude_domains ... \
