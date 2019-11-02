@@ -94,7 +94,7 @@ class LAEDBlisCorpus(object):
         for filename in os.listdir(os.path.join(path, 'dialogues')):
             with open(os.path.join(path, 'dialogues', filename)) as domain_in:
                 for line in domain_in:
-                    data += json.loads(line)
+                    data.append(json.loads(line))
         return self._process_dialogs(data, exclude_domains=self.config.exclude_domains)
 
     def _process_dialogs(self, data, exclude_domains=[]):
@@ -105,19 +105,19 @@ class LAEDBlisCorpus(object):
         all_dialog_lens = []
         speaker_map = {'bot': SYS, 'user': USR}
         for raw_dialog in data:
-            domain = raw_dialog['task']['domain']
+            domain = raw_dialog['domain']
             if domain in exclude_domains:
                 continue
             dialog = [Pack(utt=bod_utt, speaker=0, meta=None)]
 
-            for turn in raw_dialog['turns']:
-                utt = turn['text']
+            for utt_idx, utt in enumerate(raw_dialog['turns']):
+                author_type = 'bot' if utt_idx % 2 == 0 else 'user'
                 if self.config.include_domain:
-                    utt = [BOS, speaker_map[turn['authorType']], domain] + self.tokenize(utt) + [EOS]
+                    utt = [BOS, speaker_map[author_type], domain] + self.tokenize(utt) + [EOS]
                 else:
-                    utt = [BOS, speaker_map[turn['authorType']]] + self.tokenize(utt) + [EOS]
+                    utt = [BOS, speaker_map[author_type]] + self.tokenize(utt) + [EOS]
                 all_lens.append(len(utt))
-                dialog.append(Pack(utt=utt, speaker=turn['authorType']))
+                dialog.append(Pack(utt=utt, speaker=author_type))
 
             if not hasattr(self.config, 'include_eod') or self.config.include_eod:
                 dialog.append(Pack(utt=eod_utt, speaker=0))
@@ -241,7 +241,7 @@ class ZslBlisCorpus(object):
         for filename in os.listdir(os.path.join(path, 'dialogues')):
             with open(os.path.join(path, 'dialogues', filename)) as domain_in:
                 for line in domain_in:
-                    data += json.loads(line)
+                    data.append(json.loads(line))
         return self._process_dialogs(data)
 
     def _process_dialogs(self, data):
@@ -251,12 +251,11 @@ class ZslBlisCorpus(object):
         all_dialog_lens = []
         speaker_map = {'bot': SYS, 'user': USR}
         for raw_dialog in data:
-            domain = raw_dialog['task']['domain']
+            domain = raw_dialog['domain']
             dialog = [Pack(utt=bod_utt, speaker=USR, meta=None, domain=domain)]
 
-            for turn in raw_dialog['turns']:
-                utt = turn['text']
-                speaker = speaker_map[turn['authorType']]
+            for utt_idx, utt in enumerate(raw_dialog['turns']):
+                speaker = speaker_map['bot' if utt_idx % 2 == 0 else 'user']
                 if self.config.include_domain:
                     utt = [BOS, speaker, domain] + self.tokenize(utt) + [EOS]
                 else:

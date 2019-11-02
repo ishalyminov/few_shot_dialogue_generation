@@ -3,7 +3,7 @@ decorator==4.3.0
 enum34==1.1.6
 ipython==5.8.0
 ipython-genutils==0.2.0
-nltk==3.4.5
+nltk==3.2.5
 numpy==1.15.3
 pathlib2==2.3.2
 pexpect==4.6.0

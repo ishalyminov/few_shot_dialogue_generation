@@ -31,11 +31,12 @@ def get_config():
 # Data
 data_arg = add_argument_group('Data')
 data_arg.add_argument('data_dir', nargs='+')
-data_arg.add_argument('corpus_client', help='ZslBlisCorpus/ZslStanfordCorpus/SimDialCorpus')
+data_arg.add_argument('corpus_client', help='LAEDBlisCorpus/ZslStanfordCorpus/SimDialCorpus')
 data_arg.add_argument('output_file')
 data_arg.add_argument('--black_domains', nargs='*', default=[])
 data_arg.add_argument('--black_ratio', type=float, default=0.0)
 data_arg.add_argument('--include_domain', default=True)
+data_arg.add_argument('--exclude_domains', nargs='*', default=[])
 data_arg.add_argument('--log_dir', type=str, default='logs')
 
 net_arg = add_argument_group('Network')
