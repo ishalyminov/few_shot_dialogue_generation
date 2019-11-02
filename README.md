@@ -4,7 +4,7 @@ See the paper "Few-Shot Dialogue Generation Without Annotated Data: A Transfer L
 
 Pre-requisite
 ==
-Download the [MetaLWOz](https://www.microsoft.com/en-us/research/project/metalwoz/) dataset (assuming you extract it into `metalwoz-v1` folder)
+Download the [MetaLWOz](https://www.microsoft.com/en-us/research/project/metalwoz/) (previously called BLIS) dataset (assuming you extract it into `metalwoz-v1` folder)
 
 How To
 =
