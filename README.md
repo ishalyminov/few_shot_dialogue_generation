@@ -1,6 +1,15 @@
 # Dialog Knowledge Transfer
 
-See the paper "Few-Shot Dialogue Generation Without Annotated Data: A Transfer Learning Approach" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[SigDial 2019 publication]](https://arxiv.org/pdf/1908.05854.pdf) [[Poster]](https://drive.google.com/file/d/1_0jPct70HyChxCTQtxa-EuUv2QBaogDe/view?usp=sharing)
+This codebase is shared by the following papers:
+"Few-Shot Dialogue Generation Without Annotated Data: A Transfer Learning Approach" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[SigDial 2019 publication]](https://arxiv.org/pdf/1908.05854.pdf) [[Poster]](https://drive.google.com/file/d/1_0jPct70HyChxCTQtxa-EuUv2QBaogDe/view?usp=sharing)
+
+"Data-Efficient Goal-Oriented Conversation with Dialogue Knowledge Transfer Networks" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[EMNLP 2019 publication]](https://arxiv.org/pdf/1908.05854.pdf) [Poster]
+
+If you find it useful for your work, please cite the papers above.
+
+The versions of the code corresponding to each publication can be found using the git release tags.
+
+
 
 Pre-requisites
 ==
@@ -9,6 +18,7 @@ Pre-requisites
 `python make_vocabulary.py <data-dir> <corpus client type> <vocab_file.json>`
 
 Given the data sources we have, it may be `NeuralDialog-ZSDG/data/stanford`/`ZslStanfordCorpus`, `NeuralDialog-ZSDG/data/simdial`/`SimDialCorpus` or `metalwoz-v1`/`LAEDBlisCorpus`. Vocabularies of a higher coverage can be produced by merging the primary ones.
+
 How To
 =
 
