@@ -18,6 +18,7 @@ from zsdg.utils import str2bool, prepare_dirs_loggers, get_time, process_config
 from zsdg import evaluators
 
 from models.models import LAPtrHRED, ZeroShotLAPtrHRED
+from zsdg.models.models import PtrHRED, ZeroShotPtrHRED
 from utils import corpora
 
 arg_lists = []
@@ -46,14 +47,45 @@ def get_config():
     return config, unparsed
 
 
+def get_corpus_client(config):
+    if len(config.laed_z_folders):
+        return corpora.LAZslStanfordCorpus
+    else:
+        return corpora.ZslStanfordCorpus
+
+def get_data_loader(config):
+    if len(config.laed_z_folders):
+        return data_loaders.ZslLASMDDialDataLoader
+    else:
+        return data_loaders.ZslSMDDialDataLoader
+
+
+def get_model(config, train_client):
+    if len(config.laed_z_folders):
+        if config.action_match:
+            if config.use_ptr:
+                model = ZeroShotLAPtrHRED(train_client, config)
+            else:
+                raise NotImplementedError()
+        else:
+            model = LAPtrHRED(train_client, config)
+    else:
+        if config.action_match:
+            if config.use_ptr:
+                model = ZeroShotPtrHRED(train_client, config)
+            else:
+                raise NotImplementedError()
+        else:
+            model = PtrHRED(train_client, config) 
+    return model
+
 # Data
 data_arg = add_argument_group('Data')
-data_arg.add_argument('corpus_client', help='ZslBlisCorpus/ZslStanfordCorpus')
 data_arg.add_argument('--data_dir',
                       nargs='+',
                       default=['NeuralDialog-ZSDG/data/stanford'])
 data_arg.add_argument('--log_dir', type=str, default='logs')
-data_arg.add_argument('--laed_z_folders', nargs='+')
+data_arg.add_argument('--laed_z_folders', nargs='+', default=[])
 
 # Network
 net_arg = add_argument_group('Network')
@@ -92,6 +124,7 @@ train_arg.add_argument('--include_domain', type=str2bool, default=True)
 train_arg.add_argument('--include_example', type=str2bool, default=False)
 train_arg.add_argument('--include_state', type=str2bool, default=True)
 train_arg.add_argument('--random_seed', type=int, default=271)
+train_arg.add_argument('--dd_loss_coef', type=float, default=0.0)
 
 # MISC
 misc_arg = add_argument_group('Misc')
@@ -128,29 +161,20 @@ misc_arg.add_argument('--load_sess', type=str, default="ENTER_YOUR_PATH_HERE")
 def main(config):
     prepare_dirs_loggers(config, os.path.basename(__file__))
 
-    train_client = getattr(corpora, config.corpus_client)(config)
+    corpus_client_class = get_corpus_client(config)
+    train_client = corpus_client_class(config)
     train_corpus = train_client.get_corpus()
     train_dial, valid_dial, test_dial = train_corpus['train'], train_corpus['valid'], train_corpus['test']
 
     evaluator = evaluators.BleuEntEvaluator("SMD", train_client.ent_metas)
 
     # create data loader that feed the deep models
-    train_feed = data_loaders.ZslLASMDDialDataLoader("Train",
-                                                     train_dial,
-                                                     config)
-    valid_feed = data_loaders.ZslLASMDDialDataLoader("Valid",
-                                                     valid_dial,
-                                                     config)
-    test_feed = data_loaders.ZslLASMDDialDataLoader("Test",
-                                                    test_dial,
-                                                    config)
-    if config.action_match:
-        if config.use_ptr:
-            model = ZeroShotLAPtrHRED(train_client, config)
-        else:
-            raise NotImplementedError()
-    else:
-        model = LAPtrHRED(train_client, config)
+    data_loader_class = get_data_loader(config)
+    train_feed = data_loader_class("Train", train_dial, config)
+    valid_feed = data_loader_class("Valid", valid_dial, config)
+    test_feed = data_loader_class("Test", test_dial, config)
+
+    model = get_model(config, train_client)
 
     if config.forward_only:
         session_dir = os.path.join(config.log_dir, config.load_sess)
@@ -185,3 +209,4 @@ if __name__ == "__main__":
     # config = process_config(config)
     fix_random_seed(config.random_seed)
     main(config)
+

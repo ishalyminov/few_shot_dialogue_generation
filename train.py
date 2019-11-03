@@ -2,8 +2,6 @@ from __future__ import print_function
 
 import argparse
 import os
-from collections import defaultdict
-
 import torch
 import sys
 import random
@@ -13,15 +11,13 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), 'NeuralDialog-ZSDG'))
 sys.path.append(os.path.join(os.path.dirname(__file__), 'NeuralDialog-LAED'))
 
-from utils import data_loaders as data_loaders_custom
-from zsdg.dataset import data_loaders
+from utils import data_loaders
 from zsdg.main import train, validate
 from zsdg import hred_utils
 from zsdg.utils import str2bool, prepare_dirs_loggers, get_time, process_config
 from zsdg import evaluators
 
-from models.models import LAPtrHRED, ZeroShotLAPtrHRED
-from zsdg.models.models import PtrHRED, ZeroShotPtrHRED
+from models.models import LAPtrHRED, ZeroShotLAPtrHRED, PtrHRED, ZeroShotPtrHRED, HRED
 from utils import corpora
 
 arg_lists = []
@@ -50,14 +46,49 @@ def get_config():
     return config, unparsed
 
 
+def get_corpus_client(config):
+    if len(config.laed_z_folders):
+        return corpora.LAZslStanfordCorpus
+    else:
+        return corpora.ZslStanfordCorpus
+
+def get_data_loader(config):
+    if len(config.laed_z_folders):
+        return data_loaders.ZslLASMDDialDataLoader
+    else:
+        return data_loaders.ZslSMDDialDataLoader
+
+
+def get_model(config, train_client):
+    if len(config.laed_z_folders):
+        if config.action_match:
+            if config.use_ptr:
+                model = ZeroShotLAPtrHRED(train_client, config)
+            else:
+                raise NotImplementedError()
+        else:
+            model = LAPtrHRED(train_client, config)
+    else:
+        if config.action_match:
+            if config.use_ptr:
+                model = ZeroShotPtrHRED(train_client, config)
+            else:
+                raise NotImplementedError()
+        else:
+            if config.use_ptr:
+                model = PtrHRED(train_client, config)
+            else:
+                model = HRED(train_client, config)
+    return model
+
 # Data
 data_arg = add_argument_group('Data')
-data_arg.add_argument('corpus_client', help='ZslBlisCorpus/ZslStanfordCorpus')
 data_arg.add_argument('--data_dir',
                       nargs='+',
                       default=['NeuralDialog-ZSDG/data/stanford'])
 data_arg.add_argument('--log_dir', type=str, default='logs')
 data_arg.add_argument('--laed_z_folders', nargs='+', default=[])
+data_arg.add_argument('--lowercase', action='store_true', default=False)
 
 # Network
 net_arg = add_argument_group('Network')
@@ -115,7 +146,7 @@ misc_arg.add_argument('--beam_size', type=int, default=20)
 train_arg.add_argument('--black_domains', type=str, nargs='*', default=['navigate'])
 train_arg.add_argument('--black_ratio', type=float, default=1.0)
 train_arg.add_argument('--target_example_cnt', type=int, default=150)
-train_arg.add_argument('--source_example_cnt', type=int, default=1000)
+train_arg.add_argument('--source_example_cnt', type=int, default=150)
 train_arg.add_argument('--domain_description', type=str, default='nlu')
 train_arg.add_argument('--entities_file',
                        type=str,
@@ -130,47 +161,24 @@ misc_arg.add_argument('--forward_only', default=False, action='store_true')
 misc_arg.add_argument('--load_sess', type=str, default="ENTER_YOUR_PATH_HERE")
 
 
-def get_model(in_train_client, in_config):
-    if in_config.action_match:
-        if in_config.use_ptr:
-            if len(in_config.laed_z_folders):
-                model = ZeroShotLAPtrHRED(in_train_client, in_config)
-            else:
-                model = ZeroShotPtrHRED(in_train_client, in_config)
-        else:
-            raise NotImplementedError()
-    else:
-        if len(in_config.laed_z_folders):
-            model = LAPtrHRED(in_train_client, in_config)
-        else:
-            model = PtrHRED(in_train_client, in_config)
-    return model
-
-
 def main(config):
     prepare_dirs_loggers(config, os.path.basename(__file__))
 
-    train_client = getattr(corpora, config.corpus_client)(config)
-    utt_cnt_map = defaultdict(lambda: config.source_example_cnt)
-
-    for black_domain in config.black_domains:
-        utt_cnt_map[black_domain] = config.target_example_cnt
-
-    warmup_data = train_client.get_seed_responses(utt_cnt_map)
-    train_corpus = train_client.get_corpus()
-    train_dial, valid_dial, test_dial = train_corpus['train'], train_corpus['valid'], train_corpus['test']
+    corpus_client_class = get_corpus_client(config)
+    train_client = corpus_client_class(config)
+    corpus = train_client.get_corpus()
+    train_dial, valid_dial, test_dial = corpus['train'], corpus['valid'], corpus['test']
 
     evaluator = evaluators.BleuEntEvaluator("SMD", train_client.ent_metas)
 
-    data_loader_class = data_loaders.ZslLASMDDialDataLoader \
-        if len(config.laed_z_folders) \
-        else data_loaders.ZslSMDDialDataLoader
     # create data loader that feed the deep models
-    train_feed = data_loader_class("Train", train_dial, config, warmup_data)
+    data_loader_class = get_data_loader(config)
+
+    train_feed = data_loader_class("Train", train_dial, config)
     valid_feed = data_loader_class("Valid", valid_dial, config)
     test_feed = data_loader_class("Test", test_dial, config)
 
-    model = get_model(train_client, config)
+    model = get_model(config, train_client)
 
     if config.forward_only:
         session_dir = os.path.join(config.log_dir, config.load_sess)
@@ -205,3 +213,4 @@ if __name__ == "__main__":
     # config = process_config(config)
     fix_random_seed(config.random_seed)
     main(config)
+

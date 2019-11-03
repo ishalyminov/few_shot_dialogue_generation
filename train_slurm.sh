@@ -1,7 +1,7 @@
 #!/bin/bash
 
+#SBATCH --partition=amd-longq
 #SBATCH --nodes 1
-#SBATCH --partition=specialq
 #SBATCH --mail-user=is33@hw.ac.uk
 #SBATCH --mail-type=ALL
 #SBATCH --gres=gpu:1

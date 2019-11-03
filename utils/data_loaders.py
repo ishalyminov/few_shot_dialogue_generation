@@ -1,10 +1,12 @@
 from __future__ import print_function
-import numpy as np
-from zsdg.utils import Pack
-from zsdg.dataset.corpora import SimDialCorpus, SYS, USR
-from zsdg.dataset.dataloader_bases import DataLoader, LongDataLoader
 
-from zsdg.dataset.data_loaders import *
+import numpy as np
+from allennlp.modules.elmo import batch_to_ids
+
+from zsdg.utils import Pack
+from zsdg.dataset.corpora import SYS, USR
+
+from utils.dataloader_bases import DataLoader
 
 
 # Maluuba DI-VAE
@@ -357,6 +359,7 @@ class ZslMaluubaDataLoader(DataLoader):
                     laed_z=laed_z)
 
 
+# SMD ZSL
 class ZslLASMDDialDataLoader(DataLoader):
     def __init__(self, name, data, config, warmup_data=None):
         super(ZslLASMDDialDataLoader, self).__init__(name)
@@ -388,12 +391,15 @@ class ZslLASMDDialDataLoader(DataLoader):
                 if response.speaker == USR:
                     continue
                 response['utt'] = self.pad_to(self.max_utt_size, response.utt, do_pad=False)
+                response['utt_raw'] = self.pad_to(self.max_utt_size, response.utt_raw, do_pad=False)
                 response['kb'] = [self.pad_to(self.max_utt_size, item, do_pad=True) for item in response.kb]
+                response['kb_raw'] = [self.pad_to(self.max_utt_size, item, do_pad=True, pad_value='') for item in response.kb_raw]
                 response['laed_z'] = np.array(response.laed_z)
 
                 contexts = []
                 for turn in dialog[s_id:e_id]:
                     turn['utt'] = self.pad_to(self.max_utt_size, turn.utt, do_pad=False)
+                    turn['utt_raw'] = self.pad_to(self.max_utt_size, turn.utt_raw, do_pad=False)
                     contexts.append(turn)
                 results.append(Pack(context=contexts, response=response))
         return results
@@ -436,8 +442,8 @@ class ZslLASMDDialDataLoader(DataLoader):
         # the batch index, the starting point and end point for segment
         rows = [self.data[idx] for idx in selected_index]
 
-        cxt_lens, ctx_utts = [], []
-        out_utts, out_lens = [], []
+        cxt_lens, ctx_utts, ctx_utts_raw = [], [], []
+        out_utts, out_lens, out_utts_raw = [], [], []
         domains, domain_metas = [], []
 
         laed_z = []
@@ -450,6 +456,12 @@ class ZslLASMDDialDataLoader(DataLoader):
                 batch_ctx.append(item)
             for turn in in_row:
                 batch_ctx.append(self.pad_to(self.max_utt_size, turn.utt))
+
+            raw_batch_ctx = []
+            for item_raw in out_row.kb_raw:
+                ctx_utts_raw.append(item_raw)
+            for turn in in_row:
+                ctx_utts_raw.append(self.pad_to(self.max_utt_size, turn.utt_raw, pad_value=''))
 
             cxt_lens.append(len(batch_ctx))
             ctx_utts.append(batch_ctx)
@@ -464,6 +476,8 @@ class ZslLASMDDialDataLoader(DataLoader):
             laed_z.append(row.response.laed_z)
         laed_z = np.array(laed_z)
 
+        ctx_utts_raw = batch_to_ids(ctx_utts_raw)
+
         domain_metas = np.array(domain_metas)
         vec_ctx_lens = np.array(cxt_lens)
         max_ctx_len = np.max(vec_ctx_lens)
@@ -473,13 +487,19 @@ class ZslLASMDDialDataLoader(DataLoader):
         vec_out_utts = np.zeros((self.batch_size, np.max(out_lens)), dtype=np.int32)
         vec_out_lens = np.array(out_lens)
 
+        vec_ctx_elmo = np.zeros([self.batch_size, max_ctx_len] + list(ctx_utts_raw.shape)[-2:], dtype=np.int32)
+
+        ctx_len_counter = 0
         for b_id in range(self.batch_size):
             vec_out_utts[b_id, 0:vec_out_lens[b_id]] = out_utts[b_id]
             vec_ctx_utts[b_id, 0:vec_ctx_lens[b_id], :] = ctx_utts[b_id]
+            vec_ctx_elmo[b_id, 0:vec_ctx_lens[b_id], :] = ctx_utts_raw[ctx_len_counter: ctx_len_counter + vec_ctx_lens[b_id]]
+            ctx_len_counter += vec_ctx_lens[b_id]
 
         return Pack(context_lens=vec_ctx_lens,
                     contexts=vec_ctx_utts,
                     context_confs=vec_ctx_confs,
+                    contexts_elmo=vec_ctx_elmo,
                     output_lens=vec_out_lens,
                     outputs=vec_out_utts,
                     domains=domains,
@@ -524,3 +544,183 @@ class ZslLASMDDialDataLoader(DataLoader):
                     domains=domains,
                     domain_metas=domain_metas,
                     laed_z=laed_z)
+
+
+# SMD ZSL
+class ZslSMDDialDataLoader(DataLoader):
+    def __init__(self, name, data, config, warmup_data=None):
+        super(ZslSMDDialDataLoader, self).__init__(name)
+        self.max_utt_size = config.max_utt_len
+        self.max_dec_utt_size = config.max_dec_len
+        self.data = self.flatten_dialog(data, config.backward_size)
+        self.data_size = len(self.data)
+        data_lens = [len(line.context) for line in self.data]
+        if False:
+            self.indexes = list(np.argsort(data_lens))[::-1]
+        else:
+            self.indexes = range(len(data_lens))
+
+        # prepare indexes for warm up
+        self.warmup_data = warmup_data
+        if self.warmup_data is not None:
+            self.warmup_size = len(self.warmup_data)
+            self.warmup_indexes = range(self.warmup_size)
+        self.warmup_flags = None
+        self.warmup_num_batch = None
+
+    def flatten_dialog(self, data, backward_size):
+        results = []
+        for dialog in data:
+            for i in range(1, len(dialog)):
+                e_id = i
+                s_id = max(0, e_id - backward_size)
+                response = dialog[i].copy()
+                if response.speaker == USR:
+                    continue
+                response['utt'] = self.pad_to(self.max_utt_size, response.utt, do_pad=False)
+                response['utt_raw'] = self.pad_to(self.max_utt_size, response.utt_raw, do_pad=False)
+                response['kb'] = [self.pad_to(self.max_utt_size, item, do_pad=True) for item in response.kb]
+                response['kb_raw'] = [self.pad_to(self.max_utt_size, item, do_pad=True, pad_value='') for item in response.kb_raw]
+
+                contexts = []
+                for turn in dialog[s_id:e_id]:
+                    turn['utt'] = self.pad_to(self.max_utt_size, turn.utt, do_pad=False)
+                    turn['utt_raw'] = self.pad_to(self.max_utt_size, turn.utt_raw, do_pad=False)
+                    contexts.append(turn)
+                results.append(Pack(context=contexts, response=response))
+        return results
+
+    def epoch_init(self, config, shuffle=True, verbose=True):
+        super(ZslSMDDialDataLoader, self).epoch_init(config, shuffle, verbose)
+        self.warmup_flags = [False] * self.num_batch
+
+        if self.warmup_data is None:
+            return
+
+        self.warmup_num_batch = int(self.warmup_size / config.batch_size)
+        for i in range(self.warmup_num_batch):
+            self.batch_indexes.append(np.random.choice(self.warmup_indexes, config.batch_size, replace=False))
+            self.warmup_flags.append(True)
+
+        if shuffle:
+            temp_batch_id = range(len(self.warmup_flags))
+            np.random.shuffle(temp_batch_id)
+            self.batch_indexes = [self.batch_indexes[i] for i in temp_batch_id]
+            self.warmup_flags = [self.warmup_flags[i] for i in temp_batch_id]
+
+        if verbose:
+            self.logger.info("%s add with %d warm up batches" % (self.name, self.warmup_num_batch))
+
+    def next_batch(self):
+        if self.ptr < self.num_batch:
+            is_warmup = self.warmup_flags[self.ptr]
+            selected_ids = self.batch_indexes[self.ptr]
+            self.ptr += 1
+
+            if is_warmup:
+                return self._prepare_warmup_batch(selected_ids)
+            else:
+                return self._prepare_batch(selected_ids)
+        else:
+            return None
+
+    def _prepare_batch(self, selected_index):
+        # the batch index, the starting point and end point for segment
+        rows = [self.data[idx] for idx in selected_index]
+
+        cxt_lens, ctx_utts, ctx_utts_raw = [], [], []
+        out_utts, out_lens, out_utts_raw = [], [], []
+        domains, domain_metas = [], []
+
+        for row in rows:
+            in_row, out_row = row.context, row.response
+
+            # source context
+            batch_ctx = []
+            for item in out_row.kb:
+                batch_ctx.append(item)
+            for turn in in_row:
+                batch_ctx.append(self.pad_to(self.max_utt_size, turn.utt))
+            # source context for ELMo
+            raw_batch_ctx = []
+            for item_raw in out_row.kb_raw:
+                ctx_utts_raw.append(item_raw)
+            for turn in in_row:
+                ctx_utts_raw.append(self.pad_to(self.max_utt_size, turn.utt_raw, pad_value=''))
+
+            cxt_lens.append(len(batch_ctx))
+            ctx_utts.append(batch_ctx)
+
+            # target response
+            out_utt = [t for idx, t in enumerate(out_row.utt)]
+            out_utts.append(out_utt)
+            # out_utts_raw.append(self.pad_to(self.max_dec_utt_size, out_row.utt_raw, pad_value=''))
+            out_lens.append(len(out_utt))
+            domains.append(out_row.domain)
+            domain_metas.append(out_row.domain_id)
+
+        ctx_utts_raw = batch_to_ids(ctx_utts_raw)
+        # out_utts_raw = batch_to_ids(out_utts_raw)
+
+        domain_metas = np.array(domain_metas)
+        vec_ctx_lens = np.array(cxt_lens)
+        max_ctx_len = np.max(vec_ctx_lens)
+        vec_ctx_utts = np.zeros((self.batch_size, max_ctx_len, self.max_utt_size), dtype=np.int32)
+        vec_ctx_confs = np.ones((self.batch_size, max_ctx_len), dtype=np.float32)
+
+        vec_out_utts = np.zeros((self.batch_size, np.max(out_lens)), dtype=np.int32)
+        vec_out_lens = np.array(out_lens)
+
+        vec_ctx_elmo = np.zeros([self.batch_size, max_ctx_len] + list(ctx_utts_raw.shape)[-2:], dtype=np.int32)
+        # vec_out_utts_elmo = out_utts_raw.numpy().reshape([self.batch_size] + list(out_utts_raw.shape)[-2:])
+        ctx_len_counter = 0
+        for b_id in range(self.batch_size):
+            vec_out_utts[b_id, 0:vec_out_lens[b_id]] = out_utts[b_id]
+            vec_ctx_utts[b_id, 0:vec_ctx_lens[b_id], :] = ctx_utts[b_id]
+            vec_ctx_elmo[b_id, 0:vec_ctx_lens[b_id], :] = ctx_utts_raw[ctx_len_counter: ctx_len_counter + vec_ctx_lens[b_id]]
+            ctx_len_counter += vec_ctx_lens[b_id]
+
+        return Pack(context_lens=vec_ctx_lens,
+                    contexts=vec_ctx_utts,
+                    context_confs=vec_ctx_confs,
+                    contexts_elmo=vec_ctx_elmo,
+                    output_lens=vec_out_lens,
+                    outputs=vec_out_utts,
+                    # outputs_elmo=vec_out_utts_elmo,
+                    domains=domains,
+                    domain_metas=domain_metas)
+
+    def _prepare_warmup_batch(self, selected_ids):
+        # the batch index, the starting point and end point for segment
+        rows = [self.warmup_data[idx] for idx in selected_ids]
+        out_utts, out_lens = [], []
+        out_acts, out_act_lens = [], []
+        domains, domain_metas = [], []
+
+        for row in rows:
+            out_utt = [t for idx, t in enumerate(row.utt)]
+
+            # target response
+            out_acts.append(row.actions)
+            out_act_lens.append(len(row.actions))
+
+            out_utts.append(out_utt)
+            out_lens.append(len(out_utt))
+
+            domains.append(row.domain)
+            domain_metas.append(row.domain_id)
+
+        vec_out_lens = np.array(out_lens)
+        domain_metas = np.array(domain_metas)
+        vec_out_utts = np.zeros((self.batch_size, np.max(out_lens)), dtype=np.int32)
+        vec_out_acts = np.zeros((self.batch_size, np.max(out_act_lens)), dtype=np.int32)
+
+        for b_id in range(self.batch_size):
+            vec_out_utts[b_id, 0:vec_out_lens[b_id]] = out_utts[b_id]
+            vec_out_acts[b_id, 0:out_act_lens[b_id]] = out_acts[b_id]
+
+        return Pack(output_lens=vec_out_lens,
+                    outputs=vec_out_utts,
+                    output_actions=vec_out_acts,
+                    domains=domains,
+                    domain_metas=domain_metas)

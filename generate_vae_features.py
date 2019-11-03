@@ -42,9 +42,9 @@ def process_data_feed(model, feed, config):
         if batch is None:
             break
         laed_out = model.forward(batch, TEACH_FORCE, config.gen_type, return_latent=True)
-        laed_z = laed_out['y_sample']
+        laed_z = laed_out['sample_y']
         features.append(laed_z.data.cpu().numpy())
-    return np.array(features).reshape(-1, config.y_size)
+    return np.array(features).reshape(-1, config.y_size * config.k)
 
 
 def deflatten_laed_features(in_laed_features, in_dialogs, pad_mode=None):
@@ -88,6 +88,7 @@ def main(config):
     setattr(laed_config, 'batch_size', config.batch_size)
     setattr(laed_config, 'data_dir', config.data_dir)
     setattr(laed_config, 'include_eod', False) # for StED model
+    setattr(laed_config, 'domain_description', config.domain_description)
 
     if config.process_seed_data:
         assert config.corpus_client[:3] == 'Zsl', 'Incompatible coprus_client for --process_seed_data flag'
@@ -153,6 +154,7 @@ if __name__ == "__main__":
     data_arg.add_argument('--batch_size', default=1)
     data_arg.add_argument('--process_seed_data', default=False, action='store_true')
     data_arg.add_argument('--vocab', default=None)
+    data_arg.add_argument('--domain_description', default='annotation')
 
     # MISC
     misc_arg = add_argument_group('Misc')

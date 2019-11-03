@@ -28,16 +28,27 @@ def load_vocab(in_vocab_file):
     return vocab, rev_vocab, unk_id
 
 
+def _flatten_nlu_dict(self, in_dict):
+    result = []
+    for key in sorted(in_dict.keys()):
+        if type(in_dict[key]) == list:
+            for value in in_dict[key]:
+                result += [key, value]
+        else:
+            result += [key, in_dict[key]]
+    return result
+
+
 def load_laed_features(in_folder):
     dialog_mapping = {}
     for dataset in ['train', 'valid', 'test']:
-        with open(os.path.join(in_folder, 'dialogs_{}.pkl'.format(dataset))) as laed_z_dialog_in:
+        with open(os.path.join(in_folder, 'dialogs_{}.pkl'.format(dataset)), 'rb') as laed_z_dialog_in:
             laed_z_dialog = pickle.load(laed_z_dialog_in)
             dialog_mapping[dataset] = laed_z_dialog
     if not os.path.exists(os.path.join(in_folder, 'seed_utts.pkl')):
         laed_z_seed = []
     else:
-        with open(os.path.join(in_folder, 'seed_utts.pkl')) as laed_z_seed_in:
+        with open(os.path.join(in_folder, 'seed_utts.pkl', 'rb')) as laed_z_seed_in:
             laed_z_seed = np.array(pickle.load(laed_z_seed_in))
     return {'dialog': dialog_mapping, 'seed': laed_z_seed}
 
@@ -117,7 +128,7 @@ class LAEDBlisCorpus(object):
                 else:
                     utt = [BOS, speaker_map[author_type]] + self.tokenize(utt) + [EOS]
                 all_lens.append(len(utt))
-                dialog.append(Pack(utt=utt, speaker=author_type))
+                dialog.append(Pack(utt=utt, speaker=turn['authorType']))
 
             if not hasattr(self.config, 'include_eod') or self.config.include_eod:
                 dialog.append(Pack(utt=eod_utt, speaker=0))
@@ -384,18 +395,30 @@ class ZslStanfordCorpus(object):
         self.train_corpus = self._read_file(os.path.join(self._path, 'kvret_train_public.json'))
         self.valid_corpus = self._read_file(os.path.join(self._path, 'kvret_dev_public.json'))
         self.test_corpus = self._read_file(os.path.join(self._path, 'kvret_test_public.json'))
+
+        self.domains = set([dialog[0].domain for dialog in self.train_corpus])
+
         with open(os.path.join(self._path, 'kvret_entities.json'), 'rb') as f:
             self.ent_metas = json.load(f)
+            if self.config.lowercase:
+                self.ent_metas = self._lowercase_json(self.ent_metas)
 
         if self.config.domain_description == 'annotated':
+            self.domain_descriptions = self._read_domain_descriptions_annotated(self._path)
+        if self.config.domain_description == 'kb':
             self.domain_descriptions = self._read_domain_descriptions_annotated(self._path)
 
         self._build_vocab()
         print("Done loading corpus")
 
+    def _lowercase_json(self, in_json):
+        return json.loads(json.dumps(in_json).lower())
+
     def _read_file(self, path):
         with open(path, 'rb') as f:
             data = json.load(f)
+            if self.config.lowercase:
+                data = self._lowercase_json(data)
 
         return self._process_dialog(data)
 
@@ -407,7 +430,7 @@ class ZslStanfordCorpus(object):
             with open(os.path.join(path, 'domain_descriptions/{}.tsv'.format(domain)), 'rb') as f:
                 lines = f.readlines()
                 for l in lines[1:]:
-                    tokens = l.split('\t')
+                    tokens = l.lower().split('\t')
                     if tokens[2] == "":
                         break
                     utt = tokens[1]
@@ -428,6 +451,24 @@ class ZslStanfordCorpus(object):
         _read_file('navigate')
         _read_file('schedule')
         _read_file('weather')
+        return seed_responses
+
+    def _read_domain_descriptions_kb(self, path):
+        # read all domains
+        seed_responses = []
+
+        with open(os.path.join(path, 'kb_seed_data.json')) as kb_data_in:
+            kb_data = json.load(kb_data_in)
+        for domain, turns in kb_data.items():
+            for turn in turns:
+                if self.config.include_domain:
+                    utt = [BOS, self.speaker_map[turn['agent']], domain] + self.tokenize(turn['utterance']) + [EOS]
+                    kb = [BOS, self.speaker_map[turn['agent']], domain] + self.tokenize(turn['kb']) + [EOS]
+                else:
+                    utt = [BOS, self.speaker_map[turn['agent']]] + self.tokenize(turn['utterance']) + [EOS]
+                    kb = [BOS, self.speaker_map[turn['agent']]] + self.tokenize(turn['kb']) + [EOS]
+
+                seed_responses.append(Pack(domain=domain, speaker=turn['agent'], utt=utt, actions=kb))
         return seed_responses
 
     def _process_dialog(self, data):
@@ -474,7 +515,7 @@ class ZslStanfordCorpus(object):
         action = []
         nlu_dict = in_turn['data'].get('nlu', {}).get('annotations', {})
         if 'ner' in nlu_dict:
-            action += self._flatten_nlu_dict(nlu_dict['ner'])
+            action += flatten_nlu_dict(nlu_dict['ner'])
         if 'entity_linking' in nlu_dict:
             for key, value in nlu_dict['entity_linking'].items():
                 actual_value = value
@@ -497,16 +538,6 @@ class ZslStanfordCorpus(object):
                                              utt=utt,
                                              actions=action,
                                              empty_action=empty_action))
-
-    def _flatten_nlu_dict(self, in_dict):
-        result = []
-        for key in sorted(in_dict.keys()):
-            if type(in_dict[key]) == list:
-                for value in in_dict[key]:
-                    result += [key, value]
-            else:
-                result += [key, in_dict[key]]
-        return result
 
     def _build_vocab(self):
         all_words = []
@@ -538,7 +569,7 @@ class ZslStanfordCorpus(object):
     def _sent2id(self, sent):
         return [self.rev_vocab.get(t, self.unk_id) for t in sent]
 
-    def _to_id_corpus(self, name, data, use_black_list):
+    def _to_id_corpus(self, name, data, use_black_list, domains):
         results = []
         kick_cnt = 0
         domain_cnt = []
@@ -546,6 +577,8 @@ class ZslStanfordCorpus(object):
             if len(dialog) < 1:
                 continue
             domain = dialog[0].domain
+            if domain not in domains:
+                continue
             should_filter = np.random.rand() < self.black_ratio
             if use_black_list and self.black_domains \
                     and domain in self.black_domains \
@@ -556,11 +589,13 @@ class ZslStanfordCorpus(object):
             # convert utterance and feature into numeric numbers
             for turn in dialog:
                 id_turn = Pack(utt=self._sent2id(turn.utt),
+                               utt_raw=turn.utt,
                                speaker=turn.speaker,
                                domain=turn.domain,
                                domain_id=self.rev_vocab[domain],
                                meta=turn.get('meta'),
-                               kb=[self._sent2id(item) for item in turn.get('kb', [])])
+                               kb=[self._sent2id(item) for item in turn.get('kb', [])],
+                               kb_raw=turn.get('kb', []))
                 temp.append(id_turn)
 
             results.append(temp)
@@ -569,10 +604,20 @@ class ZslStanfordCorpus(object):
         self.logger.info(Counter(domain_cnt).most_common())
         return results
 
-    def get_corpus(self):
-        id_train = self._to_id_corpus("Train", self.train_corpus, use_black_list=True)
-        id_valid = self._to_id_corpus("Valid", self.valid_corpus, use_black_list=False)
-        id_test = self._to_id_corpus("Test", self.test_corpus, use_black_list=False)
+    def get_corpus(self, domains=None):
+        real_domains = domains if domains else self.domains
+        id_train = self._to_id_corpus("Train",
+                                      self.train_corpus,
+                                      use_black_list=True,
+                                      domains=real_domains)
+        id_valid = self._to_id_corpus("Valid",
+                                      self.valid_corpus,
+                                      use_black_list=False,
+                                      domains=real_domains)
+        id_test = self._to_id_corpus("Test",
+                                     self.test_corpus,
+                                     use_black_list=False,
+                                     domains=real_domains)
         return Pack(train=id_train, valid=id_valid, test=id_test)
 
     def get_seed_responses(self, utt_cnt=defaultdict(lambda: 100)):
@@ -585,6 +630,9 @@ class ZslStanfordCorpus(object):
             if resp.empty_action:
                 continue
             resp_copy = resp.copy()
+            resp_copy['utt_raw'] = resp.utt
+            resp_copy['actions_raw'] = resp.actions
+            resp_copy['domain_raw'] = resp.domain
             resp_copy['utt'] = self._sent2id(resp.utt)
             resp_copy['actions'] = self._sent2id(resp.actions)
             resp_copy['domain_id'] = self.rev_vocab[resp.domain]
@@ -624,14 +672,24 @@ class LAZslStanfordCorpus(object):
                                                         self.laed_z['valid'])
         self.test_corpus = self._read_file_with_laed_z(os.path.join(self._path, 'kvret_test_public.json'),
                                                        self.laed_z['test'])
+
+        self.domains = set([dialog[0].domain for dialog in self.train_corpus])
+
         with open(os.path.join(self._path, 'kvret_entities.json'), 'rb') as f:
             self.ent_metas = json.load(f)
+            if self.config.lowercase:
+                self.ent_metas = self._lowercase_json(self.ent_metas)
 
         if self.config.domain_description == 'annotated':
             self.domain_descriptions = self._read_domain_descriptions_annotated(self._path)
+        if self.config.domain_description == 'kb':
+            self.domain_descriptions = self._read_domain_descriptions_kb(self._path)
 
         self._build_vocab()
         print("Done loading corpus")
+
+    def _lowercase_json(self, in_json):
+        return json.loads(json.dumps(in_json).lower())
 
     def _read_domain_descriptions_annotated(self, path):
         # read all domains
@@ -667,6 +725,8 @@ class LAZslStanfordCorpus(object):
     def _read_file_with_laed_z(self, path, in_laed_z):
         with open(path, 'rb') as f:
             data = json.load(f)
+            if self.config.lowercase:
+                data = self._lowercase_json(data)
 
         return self._process_dialog(data, in_laed_z)
 
@@ -714,7 +774,7 @@ class LAZslStanfordCorpus(object):
         action = []
         nlu_dict = in_turn['data'].get('nlu', {}).get('annotations', {})
         if 'ner' in nlu_dict:
-            action += self._flatten_nlu_dict(nlu_dict['ner'])
+            action += flatten_nlu_dict(nlu_dict['ner'])
         if 'entity_linking' in nlu_dict:
             for key, value in nlu_dict['entity_linking'].items():
                 actual_value = value
@@ -738,16 +798,6 @@ class LAZslStanfordCorpus(object):
                                              actions=action,
                                              laed_z=in_laed_z,
                                              empty_action=empty_action))
-
-    def _flatten_nlu_dict(self, in_dict):
-        result = [] 
-        for key in sorted(in_dict.keys()):
-            if type(in_dict[key]) == list:
-                for value in in_dict[key]:
-                    result += [key, value]
-            else:
-                result += [key, in_dict[key]]
-        return result
 
     def _build_vocab(self):
         all_words = []
@@ -800,7 +850,7 @@ class LAZslStanfordCorpus(object):
     def _sent2id(self, sent):
         return [self.rev_vocab.get(t, self.unk_id) for t in sent]
 
-    def _to_id_corpus(self, name, data, laed_z, use_black_list):
+    def _to_id_corpus(self, name, data, laed_z, use_black_list, domains):
         results = []
         kick_cnt = 0
         domain_cnt = []
@@ -809,6 +859,8 @@ class LAZslStanfordCorpus(object):
             if len(dialog) < 1:
                 continue
             domain = dialog[0].domain
+            if domain not in domains:
+                continue
             should_filter = np.random.rand() < self.black_ratio
             if use_black_list and self.black_domains \
                     and domain in self.black_domains \
@@ -819,11 +871,13 @@ class LAZslStanfordCorpus(object):
             # convert utterance and feature into numeric numbers
             for turn, laed_z_turn in zip(dialog, dialog_laed_z):
                 id_turn = Pack(utt=self._sent2id(turn.utt),
+                               utt_raw=turn.utt,
                                speaker=turn.speaker,
                                domain=turn.domain,
                                domain_id=self.rev_vocab[domain],
                                meta=turn.get('meta'),
                                kb=[self._sent2id(item) for item in turn.get('kb', [])],
+                               kb_raw=turn.get('kb', []),
                                laed_z=laed_z_turn)
                 temp.append(id_turn)
 
@@ -833,10 +887,23 @@ class LAZslStanfordCorpus(object):
         self.logger.info(Counter(domain_cnt).most_common())
         return results
 
-    def get_corpus(self):
-        id_train = self._to_id_corpus("Train", self.train_corpus, self.laed_z['train'], use_black_list=True)
-        id_valid = self._to_id_corpus("Valid", self.valid_corpus, self.laed_z['valid'], use_black_list=False)
-        id_test = self._to_id_corpus("Test", self.test_corpus, self.laed_z['test'], use_black_list=False)
+    def get_corpus(self, domains=None):
+        real_domains = domains if domains else self.domains
+        id_train = self._to_id_corpus("Train",
+                                      self.train_corpus,
+                                      self.laed_z['train'],
+                                      use_black_list=True,
+                                      domains=real_domains)
+        id_valid = self._to_id_corpus("Valid",
+                                      self.valid_corpus,
+                                      self.laed_z['valid'],
+                                      use_black_list=False,
+                                      domains=real_domains)
+        id_test = self._to_id_corpus("Test",
+                                     self.test_corpus,
+                                     self.laed_z['test'],
+                                     use_black_list=False,
+                                     domains=real_domains)
         return Pack(train=id_train, valid=id_valid, test=id_test)
 
     def get_seed_responses(self, utt_cnt=defaultdict(lambda: 100)):
