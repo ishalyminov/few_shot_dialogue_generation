@@ -1,4 +1,4 @@
-# Dialog Knowledge Transfer
+# Dialog Knowledge Transfer Networks (DiKTNet)
 
 This codebase is shared by the following papers:
 "Few-Shot Dialogue Generation Without Annotated Data: A Transfer Learning Approach" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[SigDial 2019 publication]](https://arxiv.org/pdf/1908.05854.pdf) [[Poster]](https://drive.google.com/file/d/1_0jPct70HyChxCTQtxa-EuUv2QBaogDe/view?usp=sharing)
