@@ -3,7 +3,7 @@
 This codebase is shared by the following papers:
 "Few-Shot Dialogue Generation Without Annotated Data: A Transfer Learning Approach" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[SigDial 2019 publication]](https://www.aclweb.org/anthology/W19-5904.pdf) [[bibtex]](https://www.aclweb.org/anthology/W19-5904.bib) [[Poster]](https://drive.google.com/file/d/1_0jPct70HyChxCTQtxa-EuUv2QBaogDe/view?usp=sharing)
 
-"Data-Efficient Goal-Oriented Conversation with Dialogue Knowledge Transfer Networks" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[EMNLP 2019 publication]](https://www.aclweb.org/anthology/D19-1183.pdf) [[bibtex]](https://www.aclweb.org/anthology/D19-1183.bib) [Poster]
+"Data-Efficient Goal-Oriented Conversation with Dialogue Knowledge Transfer Networks" by [Igor Shalyminov](https://ishalyminov.github.io/), [Sungjin Lee](https://www.linkedin.com/in/sungjinlee/), [Arash Eshghi](https://sites.google.com/site/araesh81/), and [Oliver Lemon](https://sites.google.com/site/olemon/). [[EMNLP 2019 publication]](https://www.aclweb.org/anthology/D19-1183.pdf) [[bibtex]](https://www.aclweb.org/anthology/D19-1183.bib) [[Poster]](https://drive.google.com/file/d/1jH4H3pQC5HjYPD7n_wsmURL8I_ohHBt_/view?usp=sharing)
 
 If you find it useful for your work, please cite the papers above.
 
