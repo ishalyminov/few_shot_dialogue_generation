@@ -128,7 +128,7 @@ class LAEDBlisCorpus(object):
                 else:
                     utt = [BOS, speaker_map[author_type]] + self.tokenize(utt) + [EOS]
                 all_lens.append(len(utt))
-                dialog.append(Pack(utt=utt, speaker=turn['authorType']))
+                dialog.append(Pack(utt=utt, speaker=speaker_map[author_type]))
 
             if not hasattr(self.config, 'include_eod') or self.config.include_eod:
                 dialog.append(Pack(utt=eod_utt, speaker=0))
