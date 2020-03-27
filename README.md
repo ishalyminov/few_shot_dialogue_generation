@@ -14,7 +14,16 @@ The versions of the code corresponding to each publication can be found using th
 Pre-requisites
 ==
 1. Download the [Maluuba MetaLWOz](https://www.microsoft.com/en-us/research/project/metalwoz/) (previously called BLIS) dataset (assuming you extract it into `metalwoz-v1` folder)
-2. Create a vocabulary for LAED training:
+2. Prepare environment and dependencies. Below are the steps for Conda:
+
+```
+  conda create -n diktnet python=3.6
+  conda activate diktnet
+  git submodule update --init
+  pip install -r requirements.txt
+```
+
+3. Create a vocabulary for LAED training:
 `python make_vocabulary.py <data-dir> <corpus client type> <vocab_file.json>`
 
 Given the data sources we have, it may be `NeuralDialog-ZSDG/data/stanford`/`ZslStanfordCorpus`, `NeuralDialog-ZSDG/data/simdial`/`SimDialCorpus` or `metalwoz-v1`/`LAEDBlisCorpus`. Vocabularies of a higher coverage can be produced by merging the primary ones.
