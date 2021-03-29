@@ -10,7 +10,7 @@ pexpect==4.6.0
 pickleshare==0.7.5
 prompt-toolkit==1.0.15
 ptyprocess==0.6.0
-Pygments==2.2.0
+Pygments==2.7.4
 PyYAML==5.1
 scandir==1.9.0
 scikit-learn==0.20.0
